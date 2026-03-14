@@ -199,6 +199,46 @@ describe("GatewayClient", () => {
     }
   });
 
+  test("clamps oversized default request timeouts before scheduling", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new GatewayClient({
+        requestTimeoutMs: 2_592_010_000,
+      });
+      const send = vi.fn();
+      (
+        client as unknown as {
+          ws: WebSocket | { readyState: number; send: () => void; close: () => void };
+        }
+      ).ws = {
+        readyState: WebSocket.OPEN,
+        send,
+        close: vi.fn(),
+      };
+
+      let settled = false;
+      const requestPromise = client.request("status");
+      void requestPromise.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(settled).toBe(false);
+      expect((client as unknown as { pending: Map<string, unknown> }).pending.size).toBe(1);
+
+      client.stop();
+      await expect(requestPromise).rejects.toThrow("gateway client stopped");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("rejects mismatched tls fingerprint", async () => {
     const key = [
       "-----BEGIN PRIVATE KEY-----", // pragma: allowlist secret
