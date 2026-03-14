@@ -92,9 +92,14 @@ describe("GatewayClient", () => {
         requestTimeoutMs: 25,
       });
       const send = vi.fn();
-      (client as unknown as { ws: WebSocket | { readyState: number; send: () => void } }).ws = {
+      (
+        client as unknown as {
+          ws: WebSocket | { readyState: number; send: () => void; close: () => void };
+        }
+      ).ws = {
         readyState: WebSocket.OPEN,
         send,
+        close: vi.fn(),
       };
 
       const requestPromise = client.request("status");
@@ -143,6 +148,46 @@ describe("GatewayClient", () => {
       expect(send).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(25);
+
+      expect(settled).toBe(false);
+      expect((client as unknown as { pending: Map<string, unknown> }).pending.size).toBe(1);
+
+      client.stop();
+      await expect(requestPromise).rejects.toThrow("gateway client stopped");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("clamps oversized explicit request timeouts before scheduling", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new GatewayClient({
+        requestTimeoutMs: 25,
+      });
+      const send = vi.fn();
+      (
+        client as unknown as {
+          ws: WebSocket | { readyState: number; send: () => void; close: () => void };
+        }
+      ).ws = {
+        readyState: WebSocket.OPEN,
+        send,
+        close: vi.fn(),
+      };
+
+      let settled = false;
+      const requestPromise = client.request("status", undefined, { timeoutMs: 2_592_010_000 });
+      void requestPromise.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(settled).toBe(false);
       expect((client as unknown as { pending: Map<string, unknown> }).pending.size).toBe(1);

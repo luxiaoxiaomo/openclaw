@@ -727,7 +727,7 @@ export class GatewayClient {
       opts?.timeoutMs === null
         ? null
         : typeof opts?.timeoutMs === "number" && Number.isFinite(opts.timeoutMs)
-          ? Math.max(1, opts.timeoutMs)
+          ? Math.max(1, Math.min(Math.floor(opts.timeoutMs), 2_147_483_647))
           : expectFinal
             ? null
             : this.requestTimeoutMs;
